@@ -1,0 +1,55 @@
+{
+  "name": "@sattva/dokploy-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Dokploy — dynamically generates 400+ tools from OpenAPI spec with correct x-api-key auth",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "dokploy-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sattva2020/dokploy-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sattva2020/dokploy-mcp/issues"
+  },
+  "homepage": "https://github.com/sattva2020/dokploy-mcp#readme",
+  "keywords": [
+    "mcp",
+    "dokploy",
+    "model-context-protocol",
+    "deployment",
+    "docker",
+    "openapi",
+    "claude",
+    "ai-tools",
+    "devops",
+    "self-hosted"
+  ],
+  "author": "Sattva",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3"
+  }
+}
