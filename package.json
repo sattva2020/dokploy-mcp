@@ -1,7 +1,7 @@
 {
   "name": "@sattva/dokploy-mcp",
   "version": "1.0.0",
-  "description": "MCP server for Dokploy — dynamically generates 400+ tools from OpenAPI spec with correct x-api-key auth",
+  "description": "MCP server for Dokploy — dynamically generates 420+ tools from OpenAPI spec with correct x-api-key auth",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

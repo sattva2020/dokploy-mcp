@@ -5,14 +5,14 @@
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 [![MCP Compatible](https://img.shields.io/badge/MCP-compatible-blue.svg)](https://modelcontextprotocol.io/)
 
-**MCP server for [Dokploy](https://dokploy.com)** — dynamically generates 400+ tools from the Dokploy OpenAPI spec. Deploy, manage, and monitor your self-hosted infrastructure through AI assistants.
+**MCP server for [Dokploy](https://dokploy.com)** — dynamically generates 420+ tools from the Dokploy OpenAPI spec. Deploy, manage, and monitor your self-hosted infrastructure through AI assistants.
 
 ## Why This Package?
 
 | Feature | @sattva/dokploy-mcp | Community alternatives |
 |---|---|---|
 | **Auth method** | `x-api-key` header (correct) | Often missing or incorrect |
-| **API coverage** | 421+ tools (full OpenAPI) | Manual subset (~30-50 tools) |
+| **API coverage** | 420+ tools (full OpenAPI) | Manual subset (~30-50 tools) |
 | **Dependencies** | 2 (`@modelcontextprotocol/sdk`, `zod`) | Often pulls in OpenAI SDK, axios, etc. |
 | **Update strategy** | Auto-generates from live spec | Manual maintenance required |
 | **Safety annotations** | `readOnlyHint` / `destructiveHint` | Usually missing |
@@ -21,7 +21,7 @@
 ## Key Features
 
 - **Dynamic OpenAPI discovery** — fetches the spec from your Dokploy instance at startup, so new API endpoints are available immediately after a Dokploy upgrade
-- **421+ tools** — every Dokploy API endpoint becomes an MCP tool automatically
+- **420+ tools** — every Dokploy API endpoint becomes an MCP tool automatically
 - **Correct `x-api-key` authentication** — uses the proper header that Dokploy expects
 - **Zod input validation** — OpenAPI schemas are converted to Zod for runtime type checking
 - **Safety annotations** — read-only operations are marked with `readOnlyHint`, destructive ones with `destructiveHint`
@@ -30,7 +30,18 @@
 
 ## Quick Start
 
-### Claude Code (`~/.claude/mcp.json`)
+### Claude Code (CLI)
+
+```bash
+claude mcp add --transport stdio \
+  --env DOKPLOY_URL=https://dokploy.example.com \
+  --env DOKPLOY_API_KEY=your-api-key-here \
+  dokploy -- npx -y @sattva/dokploy-mcp@latest
+```
+
+### Manual configuration
+
+Add the following to your MCP client config file:
 
 ```json
 {
@@ -47,41 +58,14 @@
 }
 ```
 
-### Claude Desktop (`claude_desktop_config.json`)
+| Client | Config file |
+|---|---|
+| **Claude Code** | `~/.claude/mcp.json` |
+| **Claude Desktop** | `claude_desktop_config.json` |
+| **Cursor** | `.cursor/mcp.json` |
+| **Windsurf** | `~/.windsurf/mcp.json` |
 
-```json
-{
-  "mcpServers": {
-    "dokploy": {
-      "command": "npx",
-      "args": ["-y", "@sattva/dokploy-mcp@latest"],
-      "env": {
-        "DOKPLOY_URL": "https://dokploy.example.com",
-        "DOKPLOY_API_KEY": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-### Cursor (`.cursor/mcp.json`)
-
-```json
-{
-  "mcpServers": {
-    "dokploy": {
-      "command": "npx",
-      "args": ["-y", "@sattva/dokploy-mcp@latest"],
-      "env": {
-        "DOKPLOY_URL": "https://dokploy.example.com",
-        "DOKPLOY_API_KEY": "your-api-key-here"
-      }
-    }
-  }
-}
-```
-
-### Generic MCP Client
+### Run directly from the command line
 
 ```bash
 DOKPLOY_URL=https://dokploy.example.com \
@@ -93,7 +77,7 @@ npx @sattva/dokploy-mcp@latest
 
 | Variable | Required | Description |
 |---|---|---|
-| `DOKPLOY_URL` | Yes | Base URL of your Dokploy instance (e.g. `https://dokploy.example.com`) |
+| `DOKPLOY_URL` | Yes | Base URL of your Dokploy instance (e.g. `https://dokploy.example.com`). **Do not** append `/api` — the server adds it automatically. |
 | `DOKPLOY_API_KEY` | Yes | API key for authentication |
 
 ### Getting Your API Key
@@ -128,11 +112,11 @@ The tools are organized by Dokploy's API structure:
 | **Domain** | `domain_create`, `domain_update`, `domain_all` | Domain management |
 | **Deployment** | `deployment_all`, `deployment_allByApplication` | Deployment history |
 | **Database** | `mysql_*`, `postgres_*`, `mariadb_*`, `mongo_*`, `redis_*` | Database services |
+| **Compose** | `compose_*` | Docker Compose services |
 | **Registry** | `registry_all`, `registry_create`, `registry_one` | Container registries |
+| **Certificate** | `certificates_*` | SSL certificates |
 | **User** | `user_all`, `user_one`, `user_update` | User management |
 | **Settings** | `settings_*` | Instance settings |
-| **Compose** | `compose_*` | Docker Compose services |
-| **Certificate** | `certificate_*` | SSL certificates |
 
 ## Safety Annotations
 
@@ -142,6 +126,52 @@ Every tool is annotated based on its HTTP method and operation:
 - **`destructiveHint: true`** — operations that deploy, delete, stop, restart, or otherwise modify state
 
 This helps AI assistants make safer decisions about which tools to call without confirmation.
+
+## Troubleshooting
+
+### `DOKPLOY_URL` must not end with `/api`
+
+The MCP server appends `/api` to the base URL automatically. If you set `DOKPLOY_URL=https://dokploy.example.com/api`, requests will go to `/api/api/...` and fail.
+
+**Correct:** `https://dokploy.example.com`
+**Wrong:** `https://dokploy.example.com/api`
+
+### Windows: `npx` does not pass environment variables
+
+On Windows, `npx` launched via `cmd /c` may not forward `env` variables correctly. Use `node` with the full path to `dist/index.js` instead:
+
+```json
+{
+  "mcpServers": {
+    "dokploy": {
+      "command": "node",
+      "args": ["C:\\Users\\<you>\\AppData\\Roaming\\npm\\node_modules\\@sattva\\dokploy-mcp\\dist\\index.js"],
+      "env": {
+        "DOKPLOY_URL": "https://dokploy.example.com",
+        "DOKPLOY_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+To find the path after a global install:
+
+```bash
+npm install -g @sattva/dokploy-mcp
+npm root -g
+# → C:\Users\<you>\AppData\Roaming\npm\node_modules
+```
+
+### Connection refused / timeout
+
+- Verify `DOKPLOY_URL` is reachable: `curl https://dokploy.example.com/api/settings.getOpenApiDocument -H "x-api-key: YOUR_KEY"`
+- Check that port 443 (or your custom port) is open
+- Ensure the API key is valid and has not been revoked
+
+### 0 tools registered
+
+If the server starts but registers 0 tools, the OpenAPI spec may be empty or in an unexpected format. Check your Dokploy version — the OpenAPI endpoint was introduced in Dokploy v0.9+.
 
 ## Development
 
@@ -158,8 +188,10 @@ npm run build
 # Watch mode
 npm run dev
 
-# Point your MCP client to the local build
-# In ~/.claude/mcp.json:
+# Point your MCP client to the local build:
+```
+
+```json
 {
   "mcpServers": {
     "dokploy": {
@@ -198,4 +230,4 @@ npm run dev
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2025 Sattva
+[MIT](LICENSE) — Copyright (c) 2025-2026 Sattva

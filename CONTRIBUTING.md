@@ -24,17 +24,31 @@ npm run dev    # watch mode — recompiles on changes
 
 ### Testing locally with Claude Code
 
+Add the following to `~/.claude/mcp.json`:
+
 ```json
 {
-  "dokploy": {
-    "command": "node",
-    "args": ["/absolute/path/to/dokploy-mcp/dist/index.js"],
-    "env": {
-      "DOKPLOY_URL": "https://your-dokploy.example.com",
-      "DOKPLOY_API_KEY": "your-api-key"
+  "mcpServers": {
+    "dokploy": {
+      "command": "node",
+      "args": ["/absolute/path/to/dokploy-mcp/dist/index.js"],
+      "env": {
+        "DOKPLOY_URL": "https://your-dokploy.example.com",
+        "DOKPLOY_API_KEY": "your-api-key"
+      }
     }
   }
 }
+```
+
+### Project Structure
+
+```
+src/
+├── index.ts          # Entry point — env setup, spec fetch, server start
+├── apiClient.ts      # HTTP client with x-api-key auth
+├── toolGenerator.ts  # OpenAPI → MCP tools converter
+└── utils.ts          # Schema conversion, path helpers, error formatting
 ```
 
 ## Pull Request Guidelines
@@ -47,7 +61,8 @@ npm run dev    # watch mode — recompiles on changes
 ## Reporting Issues
 
 Open an issue at [GitHub Issues](https://github.com/sattva2020/dokploy-mcp/issues) with:
-- Your Node.js version
+- Your Node.js version (`node -v`)
 - Your Dokploy version
 - Steps to reproduce
 - Expected vs actual behavior
+- Relevant log output (stderr from the MCP server)
