@@ -6,9 +6,10 @@
  *   DOKPLOY_URL — base URL of Dokploy instance (e.g. https://dokploy.example.com)
  *   DOKPLOY_API_KEY — API key for authentication
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ApiClient } from "./apiClient.js";
@@ -48,20 +49,35 @@ async function main() {
 
   const apiClient = new ApiClient({ baseUrl, apiKey });
 
-  // Fetch OpenAPI spec from Dokploy
+  // Fetch OpenAPI spec from Dokploy; keep a disk cache so a temporarily
+  // unreachable Dokploy doesn't take the whole MCP server down with it
   log("Fetching OpenAPI spec...");
+  const specCachePath = join(
+    tmpdir(),
+    `dokploy-mcp-spec-${baseUrl.replace(/[^a-zA-Z0-9]/g, "_")}.json`
+  );
   let spec: Record<string, unknown>;
 
   try {
     const response = await apiClient.get("/api/settings.getOpenApiDocument");
     if (!response.ok) {
-      log(`Failed to fetch OpenAPI spec: ${response.status}`, response.data);
-      process.exit(1);
+      throw new Error(`HTTP ${response.status}: ${JSON.stringify(response.data).slice(0, 300)}`);
     }
     spec = response.data as Record<string, unknown>;
+    try {
+      writeFileSync(specCachePath, JSON.stringify(spec));
+    } catch {
+      // cache is best-effort
+    }
   } catch (err) {
     log("Failed to fetch OpenAPI spec:", err);
-    process.exit(1);
+    try {
+      spec = JSON.parse(readFileSync(specCachePath, "utf-8"));
+      log(`Using cached OpenAPI spec from ${specCachePath} (may be stale)`);
+    } catch {
+      log("FATAL: Dokploy is unreachable and no cached spec exists");
+      process.exit(1);
+    }
   }
 
   const info = spec.info as Record<string, string> | undefined;

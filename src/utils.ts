@@ -23,21 +23,49 @@ export interface OpenApiSchema {
   format?: string;
 }
 
+export interface OpenApiComponents {
+  schemas?: Record<string, OpenApiSchema>;
+}
+
+// Guard against circular $refs; anything deeper degrades to z.any()
+const MAX_SCHEMA_DEPTH = 10;
+
+function resolveRef(ref: string, components?: OpenApiComponents): OpenApiSchema | undefined {
+  const match = /^#\/components\/schemas\/(.+)$/.exec(ref);
+  return match ? components?.schemas?.[match[1]] : undefined;
+}
+
 /**
  * Convert an OpenAPI schema to a Zod schema for MCP tool input validation.
  */
 export function openApiSchemaToZod(
   schema: OpenApiSchema,
-  requiredFields?: string[]
+  components?: OpenApiComponents,
+  depth = 0
 ): ZodTypeAny {
+  if (depth > MAX_SCHEMA_DEPTH) return z.any();
+
+  if (schema?.$ref) {
+    const resolved = resolveRef(schema.$ref, components);
+    return resolved ? openApiSchemaToZod(resolved, components, depth + 1) : z.any();
+  }
+
   if (!schema || (!schema.type && !schema.properties && !schema.enum && !schema.oneOf && !schema.anyOf && !schema.allOf)) {
     return z.any();
   }
 
-  // Enum
+  // Enum — z.enum for strings, literal union for numeric/mixed enums
   if (schema.enum && schema.enum.length > 0) {
-    const values = schema.enum.map(String);
-    let zodSchema: ZodTypeAny = z.enum(values as [string, ...string[]]);
+    let zodSchema: ZodTypeAny;
+    if (schema.enum.every((v) => typeof v === "string")) {
+      zodSchema = z.enum(schema.enum as [string, ...string[]]);
+    } else {
+      const literals = schema.enum.map((v) => z.literal(v));
+      zodSchema =
+        literals.length === 1
+          ? literals[0]
+          : z.union(literals as unknown as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]]);
+    }
     if (schema.nullable) zodSchema = zodSchema.nullable();
     if (schema.description) zodSchema = zodSchema.describe(schema.description);
     return zodSchema;
@@ -51,7 +79,8 @@ export function openApiSchemaToZod(
   // allOf — merge properties
   if (schema.allOf) {
     const merged: OpenApiSchema = { type: "object", properties: {}, required: [] };
-    for (const sub of schema.allOf) {
+    for (const raw of schema.allOf) {
+      const sub = (raw.$ref ? resolveRef(raw.$ref, components) : raw) ?? {};
       if (sub.properties) {
         merged.properties = { ...merged.properties, ...sub.properties };
       }
@@ -59,7 +88,7 @@ export function openApiSchemaToZod(
         merged.required = [...(merged.required || []), ...sub.required];
       }
     }
-    return openApiSchemaToZod(merged);
+    return openApiSchemaToZod(merged, components, depth + 1);
   }
 
   switch (schema.type) {
@@ -93,7 +122,7 @@ export function openApiSchemaToZod(
 
     case "array": {
       const itemSchema = schema.items
-        ? openApiSchemaToZod(schema.items)
+        ? openApiSchemaToZod(schema.items, components, depth + 1)
         : z.any();
       let result: ZodTypeAny = z.array(itemSchema);
       if (schema.nullable) result = result.nullable();
@@ -109,10 +138,10 @@ export function openApiSchemaToZod(
       }
 
       const shape: Record<string, ZodTypeAny> = {};
-      const req = new Set(schema.required || requiredFields || []);
+      const req = new Set(schema.required || []);
 
       for (const [key, prop] of Object.entries(schema.properties)) {
-        let fieldSchema = openApiSchemaToZod(prop);
+        let fieldSchema = openApiSchemaToZod(prop, components, depth + 1);
         if (!req.has(key)) {
           fieldSchema = fieldSchema.optional();
         }

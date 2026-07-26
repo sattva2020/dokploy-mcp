@@ -25,6 +25,10 @@
 - **Correct `x-api-key` authentication** — uses the proper header that Dokploy expects
 - **Zod input validation** — OpenAPI schemas are converted to Zod for runtime type checking
 - **Safety annotations** — read-only operations are marked with `readOnlyHint`, destructive ones with `destructiveHint`
+- **Tool filtering** — `DOKPLOY_TOOLS` patterns and `DOKPLOY_READONLY=1` trim 500+ tools down to the profile you actually use (much smaller context for the AI)
+- **Curated descriptions** — 130+ most-used tools ship hand-written descriptions instead of bare `METHOD /path`
+- **Resilient startup** — the OpenAPI spec is cached on disk, so a temporarily unreachable Dokploy doesn't take the MCP server down
+- **Bounded responses** — compact JSON, oversized responses truncated with an explicit marker; 30s request timeout, GET retried on 5xx/429
 - **Zero-config updates** — upgrade Dokploy, restart the MCP server, get new tools
 - **Minimal dependencies** — only `@modelcontextprotocol/sdk` and `zod`
 
@@ -79,6 +83,14 @@ npx @sattva/dokploy-mcp@latest
 |---|---|---|
 | `DOKPLOY_URL` | Yes | Base URL of your Dokploy instance (e.g. `https://dokploy.example.com`). **Do not** append `/api` — the server adds it automatically. |
 | `DOKPLOY_API_KEY` | Yes | API key for authentication |
+| `DOKPLOY_TOOLS` | No | Comma-separated tool name patterns with `*` wildcards, e.g. `project_*,application_*,docker_getContainers`. Only matching tools are exposed. Unset = all tools. |
+| `DOKPLOY_READONLY` | No | `1`/`true` exposes only read-only (GET) tools — a safe profile for monitoring and inspection. Combines with `DOKPLOY_TOOLS`. |
+| `DOKPLOY_TIMEOUT_MS` | No | Request timeout in milliseconds (default `30000`). GET requests are retried twice on 5xx/429/network errors. |
+| `DOKPLOY_MAX_RESPONSE_CHARS` | No | Truncate tool responses above this size (default `50000`). Arrays are cut item-wise with a `_truncated` marker. |
+
+**Why filter?** The full tool list is ~540 tools / ~230 KB of `tools/list` payload (~60k tokens). A typical profile like `DOKPLOY_TOOLS=project_*,application_*,compose_*,deployment_*,docker_*,domain_*` cuts that by ~70%.
+
+**Spec cache:** after each successful start the OpenAPI spec is saved to the OS temp dir. If Dokploy is unreachable on the next start, the server boots from the cached spec instead of dying (tool calls will still fail until Dokploy is back).
 
 ### Getting Your API Key
 
