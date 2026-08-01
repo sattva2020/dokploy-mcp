@@ -5,14 +5,15 @@
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
 [![MCP Compatible](https://img.shields.io/badge/MCP-compatible-blue.svg)](https://modelcontextprotocol.io/)
 
-**MCP server for [Dokploy](https://dokploy.com)** — dynamically generates 420+ tools from the Dokploy OpenAPI spec. Deploy, manage, and monitor your self-hosted infrastructure through AI assistants.
+**MCP server for [Dokploy](https://dokploy.com)** — full API coverage generated from your instance's OpenAPI spec, either as one tool per endpoint (500+) or through 4 gateway tools that cost ~1% of the context. Deploy, manage, and monitor your self-hosted infrastructure through AI assistants.
 
 ## Why This Package?
 
 | Feature | @sattva/dokploy-mcp | Community alternatives |
 |---|---|---|
 | **Auth method** | `x-api-key` header (correct) | Often missing or incorrect |
-| **API coverage** | 420+ tools (full OpenAPI) | Manual subset (~30-50 tools) |
+| **API coverage** | Every endpoint in the spec (546 on Dokploy v0.29.8) | Manual subset (~30-50 tools) |
+| **Context cost** | 2.7 KB in gateway mode — full API, ~1% of the payload | Whatever the tool list weighs |
 | **Dependencies** | 2 (`@modelcontextprotocol/sdk`, `zod`) | Often pulls in OpenAI SDK, axios, etc. |
 | **Update strategy** | Auto-generates from live spec | Manual maintenance required |
 | **Safety annotations** | `readOnlyHint` / `destructiveHint` | Usually missing |
@@ -21,7 +22,7 @@
 ## Key Features
 
 - **Dynamic OpenAPI discovery** — fetches the spec from your Dokploy instance at startup, so new API endpoints are available immediately after a Dokploy upgrade
-- **420+ tools** — every Dokploy API endpoint becomes an MCP tool automatically
+- **Complete coverage** — every endpoint in your instance's spec becomes callable (546 on Dokploy v0.29.8)
 - **Correct `x-api-key` authentication** — uses the proper header that Dokploy expects
 - **Zod input validation** — OpenAPI schemas are converted to Zod for runtime type checking
 - **Safety annotations** — read-only operations are marked with `readOnlyHint`, destructive ones with `destructiveHint`
