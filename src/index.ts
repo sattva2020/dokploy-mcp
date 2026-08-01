@@ -13,7 +13,9 @@ import { tmpdir } from "node:os";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ApiClient } from "./apiClient.js";
-import { registerToolsFromOpenApi } from "./toolGenerator.js";
+import { registerEndpointTools } from "./toolGenerator.js";
+import { registerGatewayTools } from "./gateway.js";
+import { buildEndpointRegistry, type OpenApiSpec } from "./registry.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -89,12 +91,35 @@ async function main() {
     version: VERSION,
   });
 
-  // Register tools from OpenAPI spec
-  const toolCount = registerToolsFromOpenApi(server, spec as any, apiClient);
-  log(`Registered ${toolCount} tools from OpenAPI spec`);
+  // Build the endpoint registry once — both surfaces read from it
+  const { endpoints, skipped } = buildEndpointRegistry(spec as OpenApiSpec);
+  if (skipped > 0) {
+    log(`${skipped} endpoints hidden by DOKPLOY_TOOLS/DOKPLOY_READONLY filters`);
+  }
+
+  // Surface mode: "tools" (default, one tool per endpoint) | "gateway" (4 tools) | "both"
+  const mode = (process.env.DOKPLOY_MODE || "tools").toLowerCase();
+  if (!["tools", "gateway", "both"].includes(mode)) {
+    log(`WARNING: unknown DOKPLOY_MODE="${mode}", falling back to "tools"`);
+  }
+  const useGateway = mode === "gateway" || mode === "both";
+  const useTools = mode !== "gateway";
+
+  let toolCount = 0;
+  if (useGateway) {
+    toolCount += registerGatewayTools(server, endpoints, apiClient);
+  }
+  if (useTools) {
+    toolCount += registerEndpointTools(server, endpoints, apiClient);
+  }
+
+  log(
+    `Registered ${toolCount} MCP tools (mode=${useGateway && useTools ? "both" : useGateway ? "gateway" : "tools"}, ` +
+      `${endpoints.size} endpoints available)`
+  );
 
   if (toolCount === 0) {
-    log("WARNING: No tools registered. Check OpenAPI spec format.");
+    log("WARNING: No tools registered. Check OpenAPI spec format and filters.");
   }
 
   // Start stdio transport

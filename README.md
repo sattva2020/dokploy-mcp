@@ -25,6 +25,7 @@
 - **Correct `x-api-key` authentication** — uses the proper header that Dokploy expects
 - **Zod input validation** — OpenAPI schemas are converted to Zod for runtime type checking
 - **Safety annotations** — read-only operations are marked with `readOnlyHint`, destructive ones with `destructiveHint`
+- **Gateway mode** — `DOKPLOY_MODE=gateway` exposes the entire API through 4 tools instead of 500+, cutting the `tools/list` payload by ~99% (239 KB → 2.7 KB) with no loss of coverage
 - **Tool filtering** — `DOKPLOY_TOOLS` patterns and `DOKPLOY_READONLY=1` trim 500+ tools down to the profile you actually use (much smaller context for the AI)
 - **Curated descriptions** — 130+ most-used tools ship hand-written descriptions instead of bare `METHOD /path`
 - **Resilient startup** — the OpenAPI spec is cached on disk, so a temporarily unreachable Dokploy doesn't take the MCP server down
@@ -83,6 +84,7 @@ npx @sattva/dokploy-mcp@latest
 |---|---|---|
 | `DOKPLOY_URL` | Yes | Base URL of your Dokploy instance (e.g. `https://dokploy.example.com`). **Do not** append `/api` — the server adds it automatically. |
 | `DOKPLOY_API_KEY` | Yes | API key for authentication |
+| `DOKPLOY_MODE` | No | `tools` (default) — one tool per endpoint, unchanged behaviour. `gateway` — 4 tools that cover the whole API. `both` — gateway plus the individual tools. See [Gateway Mode](#gateway-mode). |
 | `DOKPLOY_TOOLS` | No | Comma-separated tool name patterns with `*` wildcards, e.g. `project_*,application_*,docker_getContainers`. Only matching tools are exposed. Unset = all tools. |
 | `DOKPLOY_READONLY` | No | `1`/`true` exposes only read-only (GET) tools — a safe profile for monitoring and inspection. Combines with `DOKPLOY_TOOLS`. |
 | `DOKPLOY_TIMEOUT_MS` | No | Request timeout in milliseconds (default `30000`). GET requests are retried twice on 5xx/429/network errors. |
@@ -91,6 +93,41 @@ npx @sattva/dokploy-mcp@latest
 **Why filter?** The full tool list is ~540 tools / ~230 KB of `tools/list` payload (~60k tokens). A typical profile like `DOKPLOY_TOOLS=project_*,application_*,compose_*,deployment_*,docker_*,domain_*` cuts that by ~70%.
 
 **Spec cache:** after each successful start the OpenAPI spec is saved to the OS temp dir. If Dokploy is unreachable on the next start, the server boots from the cached spec instead of dying (tool calls will still fail until Dokploy is back).
+
+## Gateway Mode
+
+500+ tools cost ~60k tokens of context before the assistant answers a single question. Gateway mode replaces them with **4 tools** that reach the same endpoints through discovery:
+
+```json
+"env": {
+  "DOKPLOY_URL": "https://dokploy.example.com",
+  "DOKPLOY_API_KEY": "your-api-key-here",
+  "DOKPLOY_MODE": "gateway"
+}
+```
+
+| Tool | Annotation | Purpose |
+|---|---|---|
+| `dokploy_search` | `readOnlyHint` | Find endpoints by keyword — returns names, kind, and required params |
+| `dokploy_describe` | `readOnlyHint` | Full parameter schema for one endpoint |
+| `dokploy_call` | `readOnlyHint` | Invoke a **read-only** (GET) endpoint |
+| `dokploy_mutate` | `destructiveHint` | Invoke a **writing** endpoint (create/update/deploy/delete) |
+
+Typical flow: `dokploy_search("deploy application")` → `dokploy_describe("application_deploy")` → `dokploy_mutate("application_deploy", {applicationId})`.
+
+**Why four tools and not three?** A single do-everything `call` tool would erase the read/write distinction — the client could no longer tell a listing from a deletion, and `destructiveHint` would be meaningless. Splitting them keeps the annotation honest: a client can allow `dokploy_call` freely and gate `dokploy_mutate` behind confirmation. Each tool refuses endpoints of the wrong kind before any network request, and `DOKPLOY_READONLY=1` drops `dokploy_mutate` entirely.
+
+**Measured** (Dokploy v0.29.8, 546 endpoints):
+
+| Mode | Tools | `tools/list` |
+|---|---|---|
+| `tools` (default) | 546 | 239.3 KB (~61k tokens) |
+| `gateway` | 4 | **2.7 KB (~0.7k tokens)** — 98.9% smaller |
+| `both` | 550 | 242.0 KB |
+
+A full discover-and-invoke cycle (`tools/list` + search + describe) costs ~0.8k tokens — less than the old tool list spent on a single letter of the alphabet.
+
+**Trade-off:** gateway mode adds two round-trips before the first call, and the assistant no longer sees every operation up front — it has to search. Prefer `tools` mode (or a `DOKPLOY_TOOLS` profile) when you always work with the same handful of endpoints; prefer `gateway` for broad, exploratory access at minimal context cost. `DOKPLOY_TOOLS` and `DOKPLOY_READONLY` constrain both surfaces, so a filtered-out endpoint stays unreachable through the gateway too.
 
 ### Getting Your API Key
 
